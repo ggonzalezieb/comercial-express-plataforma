@@ -246,6 +246,21 @@ input[readonly]{background:var(--gray50);color:var(--gray500)}
 .sidebar-user-suc{font-size:11px;color:var(--gray500);margin-top:2px}
 @media(max-width:768px){.sidebar{display:none}.main{margin-left:0;padding:16px}.login-left{display:none}}
 </style>
+<!-- MSAL pre-load: se carga antes que el resto de la app -->
+<script>
+(function() {
+  var s = document.createElement('script');
+  s.src = 'https://unpkg.com/@azure/msal-browser@2.38.3/lib/msal-browser.min.js';
+  s.async = false;
+  s.onerror = function() {
+    var s2 = document.createElement('script');
+    s2.src = 'https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js';
+    s2.async = false;
+    document.head.appendChild(s2);
+  };
+  document.head.appendChild(s);
+})();
+</script>
 </head>
 <body>
 
@@ -316,7 +331,7 @@ input[readonly]{background:var(--gray50);color:var(--gray500)}
   <div class="topbar-logo">
     <img id="ce-logo-2" alt="Comercial Express" style="height:32px;width:auto;object-fit:contain">
   </div>
-  <span class="topbar-badge">MVP · v1.5</span><span id="sp-status-badge" style="display:none;margin-left:8px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:#fef3c7;color:#92400e">● Demo</span>
+  <span class="topbar-badge">MVP · v1.6</span><span id="sp-status-badge" style="display:none;margin-left:8px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:#fef3c7;color:#92400e">● Demo</span>
   <div class="topbar-right">
     <span class="topbar-time" id="clock">--:--</span>
     <div class="topbar-user" onclick="toggleUserMenu(event)">
@@ -1027,15 +1042,19 @@ async function spLogin() {
   } catch(e) {
     console.error('SP Login error:', e);
     // Mensajes de error específicos y accionables
-    let msg = e.message || 'Error desconocido';
-    if (e.errorCode === 'popup_window_error') {
-      msg = 'El navegador bloqueó el popup. Permite popups para este sitio.';
+    let msg = e.message || '';
+    // Event object instead of Error = MSAL script failed to load
+    if (e instanceof Event || e.type === 'error' || !msg || msg === 'undefined') {
+      msg = 'No se pudo cargar la librería de autenticación Microsoft (MSAL). ' +
+            'Verifica tu conexión a internet e intenta de nuevo.';
+    } else if (e.errorCode === 'popup_window_error') {
+      msg = 'El navegador bloqueó el popup. Permite popups para este sitio e intenta de nuevo.';
     } else if (e.errorCode === 'user_cancelled') {
       msg = 'Inicio de sesión cancelado.';
     } else if (e.errorCode === 'redirect_uri_mismatch' || msg.includes('redirect')) {
       msg = 'URI de redirección no coincide. Verifica la configuración en Azure AD.';
-    } else if (msg === 'undefined' || msg === 'null' || !msg) {
-      msg = 'No se pudo cargar MSAL. Verifica tu conexión a internet.';
+    } else if (e.errorCode === 'invalid_client') {
+      msg = 'clientId incorrecto. Verifica la configuración de la aplicación en Azure AD.';
     }
     setLoginStatus('❌ ' + msg, true);
     return false;
@@ -1079,11 +1098,33 @@ async function preloadClients() {
 async function loadMSAL() {
   return new Promise((resolve, reject) => {
     if (window.msal) { resolve(); return; }
-    const s = document.createElement('script');
-    s.src = 'https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js';
-    s.onload  = resolve;
-    s.onerror = reject;
-    document.head.appendChild(s);
+
+    // Try multiple CDNs in order
+    const CDNS = [
+      'https://unpkg.com/@azure/msal-browser@2.38.3/lib/msal-browser.min.js',
+      'https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js',
+      'https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js',
+    ];
+
+    let idx = 0;
+    function tryNext() {
+      if (idx >= CDNS.length) {
+        reject(new Error('No se pudo cargar MSAL desde ningún CDN. Verifica tu conexión a internet.'));
+        return;
+      }
+      const s = document.createElement('script');
+      s.src = CDNS[idx++];
+      s.onload = () => {
+        console.info('✅ MSAL cargado desde:', s.src);
+        resolve();
+      };
+      s.onerror = () => {
+        console.warn('⚠️ CDN falló, intentando siguiente:', s.src);
+        tryNext();
+      };
+      document.head.appendChild(s);
+    }
+    tryNext();
   });
 }
 

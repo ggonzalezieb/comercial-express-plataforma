@@ -1,0 +1,9 @@
+{
+  "_comment": "Agrega este bloque a ~/.claude/settings.json (Claude Code) o ~/Library/Application Support/Claude/claude_desktop_config.json (Claude Desktop en Mac)",
+  "_instrucciones": "Reemplaza /RUTA/A/notebooklm-mcp con la salida de: which notebooklm-mcp  (Mac/Linux) o  where notebooklm-mcp  (Windows)",
+  "mcpServers": {
+    "notebooklm": {
+      "command": "/RUTA/A/notebooklm-mcp"
+    }
+  }
+}

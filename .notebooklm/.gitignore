@@ -1,0 +1,5 @@
+# Nunca commitear cookies ni credenciales
+cookies.txt
+*.cookies
+profiles/
+*.token
